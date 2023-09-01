@@ -1,8 +1,10 @@
 # import required python libraries
 import os
+from os.path import exists
 import logging
 import sys
 import textwrap
+import argparse
  
 # get display from Waveshare library
 import epd4in2 
@@ -12,13 +14,29 @@ from PIL import Image, ImageDraw, ImageFont
  
 font_dir = '/usr/share/fonts/'
 
-# parse cli argumets
-#for arg in sys.argv
- 
 try:
+    # parse CLI arguments
+    parser = argparse.ArgumentParser(description='Display data on Waveshare epaper screen.')
+    parser.add_argument("file", help="name of the file to display")
+    parser.add_argument("--font", help="font face to use for text, defaults to Terminess",
+        default='Terminus/TerminessNerdFont-Regular.ttf')
+    parser.add_argument("--size", help="size of the font, defaults to 16",
+        default=16, type=int)
+    parser.add_argument("--verbose", action='store_true')
+    
+    if not len(sys.argv) > 1:
+        parser.print_usage()
+        exit()
+    args = parser.parse_args()
+
+    if not exists(args.file):
+        print("file not found: " + args.file)
+        exit()
+    
     logger = logging.getLogger('epd')
     logger.addHandler(logging.StreamHandler(sys.stdout))
-    logger.setLevel(logging.DEBUG)
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
 
     # initialize display
     logger.debug('init display')
@@ -27,33 +45,33 @@ try:
     epd_disp.Clear()
        
     #define fonts
-    logger.debug('loading font')
-    font_size = 24
-    font = ImageFont.truetype(font_dir + 'Terminus/TerminessNerdFont-Regular.ttf', font_size)
+    logger.debug('loading font ' + args.font + " at size " + str(args.size)) 
+    font = ImageFont.truetype(font_dir + args.font, int(args.size))
     
-    #TODO test if font is monospace with font.metrics("fixed")
+    # #TODO test if font is monospace with font.metrics("fixed")
     
     # define and draw background
     logger.debug('setting up image')
     image = Image.new(mode='1', size=(epd_disp.width,epd_disp.height),color=255)
     logger.debug('calling draw')
     draw = ImageDraw.Draw(image)
-    
-    # position and draw text
-    text = "Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure. We are met on a great battle-field of that war. We have come to dedicate a portion of that field, as a final resting place for those who here gave their lives that that nation might live. It is altogether fitting and proper that we should do this. But, in a larger sense, we can not dedicate—we can not consecrate—we can not hallow—this ground. The brave men, living and dead, who struggled here, have consecrated it, far above our poor power to add or detract. The world will little note, nor long remember what we say here, but it can never forget what they did here. It is for us the living, rather, to be dedicated here to the unfinished work which they who fought here have thus far so nobly advanced. It is rather for us to be here dedicated to the great task remaining before us—that from these honored dead we take increased devotion to that cause for which they gave the last full measure of devotion—that we here highly resolve that these dead shall not have died in vain—that this nation, under God, shall have a new birth of freedom—and that government of the people, by the people, for the people, shall not perish from the earth."
 
+    # position and draw text
     logger.debug('drawing text')
-    rows = epd_disp.height // font_size
+    rows = epd_disp.height // args.size
     charlen = font.getlength("X") # find pixel width of a single char (only works with mono font)
     cols = epd_disp.width // charlen
     logger.debug("rows: " + str(rows) + ", columns: " + str(cols))
     wrapper = textwrap.TextWrapper()
     wrapper.width = cols
     wrapper.max_lines = rows
+    file = open(args.file)
+    text = file.read()
+    file.close()
     wrapped_text = wrapper.wrap(text)
     
     for linenum in range(0, rows):
-        draw.text((0, linenum * font_size), font=font, text=wrapped_text[linenum])
+        draw.text((0, linenum * args.size), font=font, text=wrapped_text[linenum])
     
     #logger.debug('loading graphic')
     #beholder = Image.open('beholder.jpg')
@@ -67,7 +85,7 @@ try:
     epd_disp.display(epd_disp.getbuffer(image))
 
     # go to sleep
-    logger.debug('me go ni-ni')
+    logger.debug('display going to sleep')
     epd_disp.sleep()
 
 except Exception as e:
